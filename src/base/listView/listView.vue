@@ -1,7 +1,13 @@
 <template>
-  <scroll class="listview" :data="data">
+  <scroll
+    class="listview"
+    :data="data"
+    :listenScroll="listenScroll"
+    :probeType="probeType"
+    @scroll="scroll"
+    ref="listView">
     <ul>
-      <li v-for="group in data" :key="group.title" class="list-group">
+      <li v-for="group in data" :key="group.title" class="list-group" ref="listGroup">
         <h2 class="list-group-title">{{group.title}}</h2>
         <ul>
           <li v-for="item in group.items" :key="item.id" class="list-group-item">
@@ -11,9 +17,17 @@
         </ul>
       </li>
     </ul>
-    <div class="list-shortcut">
+    <div
+      class="list-shortcut"
+      @touchstart="onShortcutTouchStart"
+      @touchmove.stop.prevent="onShortcutTouchMove">
       <ul>
-        <li v-for="item in shortcutList" :key="item" class="item">
+        <li
+          class="item"
+          :class="{current: currentIndex === index}"
+          v-for="(item, index) in shortcutList"
+          :key="item"
+          :data-index="index">
           {{item}}
         </li>
       </ul>
@@ -23,6 +37,9 @@
 
 <script type="text/ecmascript-6">
   import Scroll from 'base/scroll/scroll'
+  import {getData} from 'common/js/dom'
+
+  const ANCHOR_HEIGHT = 18
 
   export default {
     props: {
@@ -33,14 +50,89 @@
         }
       }
     },
+    data() {
+      return {
+        scrollY: -1,
+        currentIndex: 0,
+      }
+    },
     components: {
       Scroll,
+    },
+    created() {
+      this.touch = {}
+      this.listenScroll = true
+      this.listHeight = []
+      this.probeType = 3
     },
     computed: {
       shortcutList() {
         return this.data.map((group) => {
           return group.title.substr(0, 1)
         })
+      }
+    },
+    methods: {
+      onShortcutTouchStart(e) {
+        let anchorIndex = getData(e.target, 'index')
+        let firstTouch = e.touches[0]
+        this.touch.y1 = firstTouch.pageY
+        this.touch.anchorIndex = anchorIndex
+
+        this._scrollTo(anchorIndex)
+      },
+      onShortcutTouchMove(e) {
+        let firstTouch = e.touches[0]
+        this.touch.y2 = firstTouch.pageY
+        let delta = (this.touch.y2 - this.touch.y1) / ANCHOR_HEIGHT | 0
+        let anchorIndex = parseInt(this.touch.anchorIndex) + delta
+
+        this._scrollTo(anchorIndex)
+      },
+      scroll(pos) {
+        this.scrollY = pos.y
+      },
+      _scrollTo(index) {
+        if (!index && index !== 0) {
+          return
+        }
+        if (index < 0) {
+          index = 0
+        } else if (index > this.listHeight.length - 2) {
+          index = this.listHeight.length - 2
+        }
+
+        this.scrollY = -this.listHeight[index]
+        this.$refs.listView.scrollToElement(this.$refs.listGroup[index], 0)
+      },
+      _calculateHeight() {
+        this.listHeight = []
+        let height = 0
+        this.listHeight.push(height)
+
+        this.$refs.listGroup.forEach(item => {
+          height += item.clientHeight
+          this.listHeight.push(height)
+        })
+      }
+    },
+    watch: {
+      data() {
+        setTimeout(() => {
+          this._calculateHeight()
+        }, 20)
+      },
+      scrollY(newY) {
+        if (newY >= 0) {
+          this.currentIndex = 0
+          return false
+        }
+
+        newY = -newY
+        let preList = this.listHeight.filter(item => {
+          return item <= newY
+        })
+        this.currentIndex = preList.length - 1
       }
     }
   }
